@@ -27,7 +27,7 @@ func main() {
 		commands := getCommands()
 		command, ok := commands[words[0]]
 		if ok {
-			err := command.callback(cfg)
+			err := command.callback(cfg, words[1:]...)
 			if err != nil {
 				fmt.Println(err)
 			}
@@ -43,13 +43,13 @@ func cleanInput(text string) []string {
 	return words
 }
 
-func commandExit(cfg *config) error {
+func commandExit(cfg *config, _ ...string) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil
 }
 
-func commandHelp(cfg *config) error {
+func commandHelp(cfg *config, _ ...string) error {
 	fmt.Println("Usage:")
 	fmt.Println("")
 
@@ -60,7 +60,7 @@ func commandHelp(cfg *config) error {
 	return nil
 }
 
-func commandMap(cfg *config) error {
+func commandMap(cfg *config, _ ...string) error {
 	res, err := cfg.pokeapiClient.GetLocationArea(cfg.nextURL)
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func commandMap(cfg *config) error {
 	return nil
 }
 
-func commandMapb(cfg *config) error {
+func commandMapb(cfg *config, _ ...string) error {
 	if cfg.previousURL == nil {
 		fmt.Println("You're on the first page")
 		return nil
@@ -99,10 +99,33 @@ func commandMapb(cfg *config) error {
 	return nil
 }
 
+func commandExplore(cfg *config, args ...string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("Please provide a location area name")
+	}
+
+	locationArea := args[0]
+
+	fmt.Printf("Exploring %s...\n", locationArea)
+
+	location, err := cfg.pokeapiClient.GetLocationAreaByName(locationArea)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Found Pokemon:")
+	for _, encounter := range location.Pokemon {
+		fmt.Printf(" - %s\n", encounter.Pokemon.Name)
+	}
+
+	return nil
+
+}
+
 type cliCommand struct {
 	name        string
 	description string
-	callback    func(*config) error
+	callback    func(*config, ...string) error
 }
 
 type config struct {
@@ -132,6 +155,11 @@ func getCommands() map[string]cliCommand {
 			name:        "mapb",
 			description: "Lists the previous location areas",
 			callback:    commandMapb,
+		},
+		"explore": {
+			name:        "explore",
+			description: "Lists all the Pokémon in the location area",
+			callback:    commandExplore,
 		},
 	}
 }
