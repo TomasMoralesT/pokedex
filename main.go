@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 
@@ -12,6 +14,7 @@ import (
 func main() {
 	cfg := &config{
 		pokeapiClient: pokeapi.NewClient(),
+		caughtPokemon: make(map[string]pokeapi.Pokemon),
 	}
 	fmt.Println("Welcome to the Pokedex!")
 	scanner := bufio.NewScanner(os.Stdin)
@@ -122,6 +125,73 @@ func commandExplore(cfg *config, args ...string) error {
 
 }
 
+func commandCatch(cfg *config, args ...string) error {
+	if len(args) < 1 {
+		return errors.New("missing Pokemon name")
+	}
+	fmt.Printf("Throwing a Pokeball at %s...\n", args[0])
+
+	pokemon, err := cfg.pokeapiClient.GetPokemonData((args[0]))
+	if err != nil {
+		return err
+	}
+
+	baseRate := 80
+	scalingFactor := 4
+	threshold := baseRate - (pokemon.BaseExperience / scalingFactor)
+	randNum := rand.Intn(100)
+	caught := randNum < threshold
+
+	if caught {
+		fmt.Printf("%s was caught!\n", args[0])
+		cfg.caughtPokemon[pokemon.Name] = pokemon
+	} else {
+		fmt.Printf("%s escaped!\n", args[0])
+	}
+
+	return nil
+}
+
+func commandInspect(cfg *config, args ...string) error {
+
+	if len(args) < 1 {
+		return errors.New("missing Pokemon name")
+	}
+	value, exists := cfg.caughtPokemon[args[0]]
+	if exists {
+		fmt.Printf("Name: %s\n", value.Name)
+		fmt.Printf("Height: %d\n", value.Height)
+		fmt.Printf("Weight: %d\n", value.Weight)
+		fmt.Println("Stats:")
+		for _, stat := range value.Stats {
+			fmt.Printf("  -%s: %d\n", stat.Stat.Name, stat.BaseStat)
+		}
+		fmt.Println("Types:")
+		for _, t := range value.Types {
+			fmt.Printf("  - %s\n", t.Type.Name)
+		}
+
+	} else {
+		fmt.Printf("%s not caught yet!\n", args[0])
+	}
+	return nil
+}
+
+func commandPokedex(cfg *config, _ ...string) error {
+
+	if len(cfg.caughtPokemon) == 0 {
+		fmt.Println("Your Pokedex is empty. Go catch some Pokémon first!")
+		return nil // Assuming your function returns an error
+	}
+
+	fmt.Println("Your Pokedex:")
+	for _, pokemon := range cfg.caughtPokemon {
+		fmt.Printf(" - %s\n", pokemon.Name)
+	}
+
+	return nil
+}
+
 type cliCommand struct {
 	name        string
 	description string
@@ -130,6 +200,7 @@ type cliCommand struct {
 
 type config struct {
 	pokeapiClient pokeapi.Client
+	caughtPokemon map[string]pokeapi.Pokemon
 	nextURL       *string
 	previousURL   *string
 }
@@ -160,6 +231,21 @@ func getCommands() map[string]cliCommand {
 			name:        "explore",
 			description: "Lists all the Pokémon in the location area",
 			callback:    commandExplore,
+		},
+		"catch": {
+			name:        "catch",
+			description: "Attempts to catch a Pokemon",
+			callback:    commandCatch,
+		},
+		"inspect": {
+			name:        "inspect",
+			description: "Prints Pokemon's name, height, weight, stats and type",
+			callback:    commandInspect,
+		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "Lists all caught Pokemon",
+			callback:    commandPokedex,
 		},
 	}
 }
